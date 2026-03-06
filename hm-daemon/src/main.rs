@@ -1,8 +1,12 @@
+mod handlers;
 mod models;
 mod state;
 
 use crate::state::new_shared_state;
-use axum::{routing::get, Router};
+use axum::{
+    routing::{delete, get},
+    Router,
+};
 
 #[tokio::main]
 async fn main() {
@@ -10,6 +14,11 @@ async fn main() {
 
     let app = Router::new()
         .route("/status", get(|| async { "Daemon Operational" }))
+        .route(
+            "/commands",
+            get(handlers::list_commands).post(handlers::create_command),
+        )
+        .route("/commands/{id}", delete(handlers::delete_command))
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
