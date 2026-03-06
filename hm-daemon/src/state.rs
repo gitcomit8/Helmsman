@@ -1,11 +1,22 @@
-use crate::models::CommandSpec;
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 
-// Type alias for thread-safe shared state
-pub type SharedState = Arc<RwLock<HashMap<String, CommandSpec>>>;
+pub type DbPool = Pool<SqliteConnectionManager>;
 
-// Factory fn to init the registry
-pub fn new_shared_state() -> SharedState {
-    Arc::new(RwLock::new(HashMap::new()))
+pub fn init_db_pool() -> DbPool {
+    let manager = SqliteConnectionManager::file("helmsman.db");
+    let pool = Pool::new(manager).expect("Failed to initialize SQLite connection pool");
+    let conn = pool
+        .get()
+        .expect("Failed to get SQLite connection from pool");
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS commands(
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		working_dir TEXT,
+		timeout_seconds INTEGER)",
+        (),
+    )
+    .expect("Failed to execute schema DDL");
+    pool
 }

@@ -6,5 +6,5 @@ pub struct CommandSpec {
     pub name: String,
     pub command: Vec<String>,
     pub working_dir: Option<String>,
-    pub timeout_seconds: Option<u64>,
+    pub timeout_seconds: Option<i64>,
 }
