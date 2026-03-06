@@ -21,6 +21,8 @@ async fn main() {
 		)
 		.route("/commands/{id}", delete(handlers::delete_command))
 		.route("/commands/{id}/run", post(handlers::run_command))
+		.route("/jobs", get(handlers::list_jobs).post(handlers::create_job))
+		.route("/jobs/{id}", get(handlers::delete_job))
 		.with_state(db_pool);
 
 	let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();

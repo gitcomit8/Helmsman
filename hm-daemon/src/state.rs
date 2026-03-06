@@ -16,7 +16,7 @@ pub fn init_db_pool() -> DbPool {
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			command TEXT NOT NULL,
-			working_directory TEXT,
+			working_dir TEXT,
 			timeout_seconds INTEGER
 		)",
 		(),
