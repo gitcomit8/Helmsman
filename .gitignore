@@ -507,3 +507,4 @@ obj/
 
 !/gradle/wrapper/gradle-wrapper.jar
 
+*.db
