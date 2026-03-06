@@ -1,13 +1,16 @@
+use crate::models::{Job, JobCreateRequest};
 use crate::{models::{CommandSpec, JobResult}, state::DbPool};
 use axum::{
 	extract::{Path, State},
 	http::StatusCode,
 	Json,
 };
+use chrono::{DateTime, Utc};
+use cron::Schedule;
 use rusqlite::params;
+use std::str::FromStr;
 
 pub async fn list_commands(State(pool): State<DbPool>) -> Result<Json<Vec<CommandSpec>>, StatusCode> {
-	// Explicitly annotate the closure's return type signature
 	let commands = tokio::task::spawn_blocking(move || -> Result<Vec<CommandSpec>, StatusCode> {
 		let conn = pool.get().map_err(|e| {
 			eprintln!("Pool acquisition error: {}", e);
@@ -58,7 +61,6 @@ pub async fn create_command(
 		})?;
 
 		let cmd_json = serde_json::to_string(&payload.command).unwrap_or_default();
-		// Coerce u64 down to i64 to satisfy SQLite INTEGER constraints
 		let timeout = payload.timeout_seconds.map(|t| t as i64);
 
 		if let Err(e) = conn.execute(
@@ -94,13 +96,11 @@ pub async fn delete_command(
 	}).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
 }
 
-// In src/handlers.rs
 
 pub async fn run_command(
 	State(pool): State<DbPool>,
 	Path(id): Path<String>,
 ) -> Result<Json<JobResult>, StatusCode> {
-	// Explicitly annotate the closure's return type signature
 	let spec_opt = tokio::task::spawn_blocking(move || -> Result<Option<CommandSpec>, StatusCode> {
 		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 		let mut stmt = conn.prepare("SELECT name, command, working_dir, timeout_seconds FROM commands WHERE id = ?1").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -128,4 +128,79 @@ pub async fn run_command(
 			Err(StatusCode::INTERNAL_SERVER_ERROR)
 		}
 	}
+}
+
+pub async fn create_job(
+	State(pool): State<DbPool>,
+	Json(payload): Json<JobCreateRequest>,
+) -> Result<StatusCode, StatusCode> {
+	let schedule = Schedule::from_str(&payload.schedule).map_err(|e| {
+		eprintln!("Cron Parse error: {}", e);
+		StatusCode::BAD_REQUEST
+	})?;
+
+	let next_run = schedule.upcoming(Utc).next().ok_or(StatusCode::BAD_REQUEST)?;
+
+	tokio::task::spawn_blocking(move || -> Result<StatusCode, StatusCode> {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		let next_run_str = next_run.to_rfc3339();
+
+		if let Err(e) = conn.execute(
+			"INSERT OR REPLACE INTO JOBS (id, name,schedule, command_id, next_run) VALUES (?1, ?2, ?3, ?4, ?5)",
+			params![payload.id, payload.name, payload.schedule, payload.command_id, next_run_str],
+		) {
+			eprintln!("Job insertion fault: {}", e);
+			return Err(StatusCode::INTERNAL_SERVER_ERROR);
+		}
+
+		Ok(StatusCode::CREATED)
+	}).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+pub async fn list_jobs(State(pool): State<DbPool>) -> Result<Json<Vec<Job>>, StatusCode> {
+	let jobs = tokio::task::spawn_blocking(move || -> Result<Vec<Job>, StatusCode> {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		let mut stmt = conn.prepare("SELECT id, name, schedule, command_id, last_run, next_run FROM jobs").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+		let job_iter = stmt.query_map([], |row| {
+			let last_run_str: Option<String> = row.get(4)?;
+			let next_run_str: String = row.get(5)?;
+
+			let last_run = last_run_str.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&Utc)));
+			let next_run = DateTime::parse_from_rfc3339(&next_run_str).unwrap().with_timezone(&Utc);
+
+			Ok(Job {
+				id: row.get(0)?,
+				name: row.get(1)?,
+				schedule: row.get(2)?,
+				command_id: row.get(3)?,
+				last_run,
+				next_run,
+			})
+		}).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+		let mut results = Vec::new();
+		for j in job_iter {
+			if let Ok(job) = j {
+				results.push(job);
+			}
+		}
+		Ok(results)
+	}).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+	Ok(Json(jobs))
+}
+
+pub async fn delete_job(
+	State(pool): State<DbPool>,
+	Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+	tokio::task::spawn_blocking(move || -> Result<StatusCode, StatusCode> {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		match conn.execute("DELETE FROM jobs WHERE id = ?1", params![id]) {
+			Ok(rows) if rows > 0 => Ok(StatusCode::NO_CONTENT),
+			Ok(_) => Ok(StatusCode::NOT_FOUND),
+			Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+		}
+	}).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
 }
