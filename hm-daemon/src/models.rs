@@ -28,6 +28,20 @@ pub struct Job {
 	pub next_run: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Server {
+	pub id: String,
+	pub name: String,
+	pub host: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServerCreateRequest {
+	pub id: String,
+	pub name: String,
+	pub host: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct JobCreateRequest {
 	pub id: String,
