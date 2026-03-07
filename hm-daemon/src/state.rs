@@ -35,5 +35,14 @@ pub fn init_db_pool() -> DbPool {
 		(),
 	).expect("Failed to execute jobs schema DDL");
 
+	conn.execute(
+		"CREATE TABLE IF NOT EXISTS servers (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			host TEXT NOT NULL
+		)",
+		(),
+	).expect("Failed to execute servers schema DDL");
+
 	pool
 }
