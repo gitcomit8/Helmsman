@@ -6,18 +6,24 @@ mod executor;
 mod telemetry;
 mod auth;
 
-use crate::state::init_db_pool;
+use crate::state::{init_db_pool, AppState};
 use axum::routing::post;
 use axum::{
 	routing::{delete, get},
 	Router,
 };
+use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
 	let db_pool = init_db_pool();
 
 	tokio::spawn(scheduler::run_scheduler(db_pool.clone()));
+
+	let app_state = AppState {
+		pool: db_pool,
+		pairing_otp: Arc::new(Mutex::new(None)),
+	};
 
 	let app = Router::new()
 		.route("/status", get(|| async { "Daemon Operational" }))
@@ -33,7 +39,7 @@ async fn main() {
 		.route("/servers", get(handlers::list_servers).post(handlers::create_server))
 		.route("/servers/{id}", delete(handlers::delete_server))
 		.route("/servers/{id}/status", get(handlers::get_server_status))
-		.with_state(db_pool);
+		.with_state(app_state);
 
 	let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 	println!(

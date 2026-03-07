@@ -1,7 +1,21 @@
+use axum::extract::FromRef;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use std::sync::{Arc, Mutex};
 
 pub type DbPool = Pool<SqliteConnectionManager>;
+
+#[derive(Clone)]
+pub struct AppState {
+	pub pool: DbPool,
+	pub pairing_otp: Arc<Mutex<Option<String>>>,
+}
+
+impl FromRef<AppState> for DbPool {
+	fn from_ref(state: &AppState) -> Self {
+		state.pool.clone()
+	}
+}
 
 pub fn init_db_pool() -> DbPool {
 	let manager = SqliteConnectionManager::file("helmsman.db");
