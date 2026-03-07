@@ -14,6 +14,9 @@ use axum::{
 #[tokio::main]
 async fn main() {
 	let db_pool = init_db_pool();
+
+	tokio::spawn(scheduler::run_scheduler(db_pool.clone()));
+
 	let app = Router::new()
 		.route("/status", get(|| async { "Daemon Operational" }))
 		.route(
