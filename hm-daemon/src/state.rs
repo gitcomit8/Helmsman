@@ -44,5 +44,13 @@ pub fn init_db_pool() -> DbPool {
 		(),
 	).expect("Failed to execute servers schema DDL");
 
+	conn.execute(
+		"CREATE TABLE IF NOT EXISTS tokens (
+			token TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL
+		)",
+		(),
+	).expect("Failed to execute tokens schema DDL");
+
 	pool
 }
