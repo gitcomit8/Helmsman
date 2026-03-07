@@ -1,4 +1,4 @@
-use crate::models::{Job, JobCreateRequest};
+use crate::models::{Job, JobCreateRequest, Server, ServerCreateRequest};
 use crate::{models::{CommandSpec, JobResult}, state::DbPool};
 use axum::{
 	extract::{Path, State},
@@ -203,4 +203,71 @@ pub async fn delete_job(
 			Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
 		}
 	}).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+pub async fn list_servers(State(pool): State<DbPool>) -> Result<Json<Vec<Server>>, StatusCode> {
+	let servers = tokio::task::spawn_blocking(move || -> Result<Vec<Server>, StatusCode> {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		let mut stmt = conn
+			.prepare("SELECT id, name, host FROM servers")
+			.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+		let iter = stmt
+			.query_map([], |row| {
+				Ok(Server {
+					id: row.get(0)?,
+					name: row.get(1)?,
+					host: row.get(2)?,
+				})
+			})
+			.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+		let mut results = Vec::new();
+		for s in iter {
+			if let Ok(server) = s {
+				results.push(server);
+			}
+		}
+		Ok(results)
+	})
+	.await
+	.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+	Ok(Json(servers))
+}
+
+pub async fn create_server(
+	State(pool): State<DbPool>,
+	Json(payload): Json<ServerCreateRequest>,
+) -> Result<StatusCode, StatusCode> {
+	tokio::task::spawn_blocking(move || {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		conn.execute(
+			"INSERT OR REPLACE INTO servers (id, name, host) VALUES (?1, ?2, ?3)",
+			params![payload.id, payload.name, payload.host],
+		)
+		.map_err(|e| {
+			eprintln!("Server insert error: {}", e);
+			StatusCode::INTERNAL_SERVER_ERROR
+		})?;
+		Ok(StatusCode::CREATED)
+	})
+	.await
+	.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+pub async fn delete_server(
+	State(pool): State<DbPool>,
+	Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+	tokio::task::spawn_blocking(move || {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		match conn.execute("DELETE FROM servers WHERE id = ?1", params![id]) {
+			Ok(rows) if rows > 0 => Ok(StatusCode::NO_CONTENT),
+			Ok(_) => Ok(StatusCode::NOT_FOUND),
+			Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+		}
+	})
+	.await
+	.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
 }
