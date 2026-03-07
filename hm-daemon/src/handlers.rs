@@ -1,4 +1,4 @@
-use crate::models::{Job, JobCreateRequest, Server, ServerCreateRequest};
+use crate::models::{Job, JobCreateRequest, Server, ServerCreateRequest, ServerStatus};
 use crate::{models::{CommandSpec, JobResult}, state::DbPool};
 use axum::{
 	extract::{Path, State},
@@ -270,4 +270,34 @@ pub async fn delete_server(
 	})
 	.await
 	.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+pub async fn get_server_status(
+	State(pool): State<DbPool>,
+	Path(id): Path<String>,
+) -> Result<Json<ServerStatus>, StatusCode> {
+	let host = tokio::task::spawn_blocking(move || -> Result<String, StatusCode> {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		let mut stmt = conn
+			.prepare("SELECT host FROM servers WHERE id = ?1")
+			.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		stmt.query_row(params![id], |row| row.get::<_, String>(0))
+			.map_err(|_| StatusCode::NOT_FOUND)
+	})
+	.await
+	.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+	let uname = crate::telemetry::get_uname();
+
+	let (ping_ms, ping_error) = match crate::telemetry::ping_host(&host).await {
+		Ok(dur) => (Some(dur.as_secs_f64() * 1000.0), None),
+		Err(e) => (None, Some(e)),
+	};
+
+	Ok(Json(ServerStatus {
+		host,
+		ping_ms,
+		ping_error,
+		uname,
+	}))
 }
