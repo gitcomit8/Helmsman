@@ -42,6 +42,14 @@ pub struct ServerCreateRequest {
 	pub host: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ServerStatus {
+	pub host: String,
+	pub ping_ms: Option<f64>,
+	pub ping_error: Option<String>,
+	pub uname: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct JobCreateRequest {
 	pub id: String,
