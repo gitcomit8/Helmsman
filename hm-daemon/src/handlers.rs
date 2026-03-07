@@ -1,14 +1,20 @@
 use crate::models::{Job, JobCreateRequest, Server, ServerCreateRequest, ServerStatus};
 use crate::{models::{CommandSpec, JobResult}, state::DbPool};
 use axum::{
-	extract::{Path, State},
+	extract::{
+		ws::{Message, WebSocket, WebSocketUpgrade},
+		Path, State,
+	},
 	http::StatusCode,
+	response::Response,
 	Json,
 };
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use rusqlite::params;
+use std::process::Stdio;
 use std::str::FromStr;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 pub async fn list_commands(State(pool): State<DbPool>) -> Result<Json<Vec<CommandSpec>>, StatusCode> {
 	let commands = tokio::task::spawn_blocking(move || -> Result<Vec<CommandSpec>, StatusCode> {
@@ -300,4 +306,105 @@ pub async fn get_server_status(
 		ping_error,
 		uname,
 	}))
+}
+
+pub async fn stream_command(
+	State(pool): State<DbPool>,
+	Path(id): Path<String>,
+	ws: WebSocketUpgrade,
+) -> Result<Response, StatusCode> {
+	let spec_opt = tokio::task::spawn_blocking(move || -> Result<Option<CommandSpec>, StatusCode> {
+		let conn = pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+		let mut stmt = conn
+			.prepare("SELECT name, command, working_dir, timeout_seconds FROM commands WHERE id = ?1")
+			.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+		let spec = stmt
+			.query_row(params![id], |row| {
+				let cmd_str: String = row.get(1)?;
+				let timeout_i64: Option<i64> = row.get(3)?;
+				Ok(CommandSpec {
+					id: id.clone(),
+					name: row.get(0)?,
+					command: serde_json::from_str(&cmd_str).unwrap_or_default(),
+					working_dir: row.get(2)?,
+					timeout_seconds: timeout_i64.map(|t| t as u64),
+				})
+			})
+			.ok();
+		Ok(spec)
+	})
+	.await
+	.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+	let spec = spec_opt.ok_or(StatusCode::NOT_FOUND)?;
+
+	Ok(ws.on_upgrade(move |socket| handle_stream(socket, spec)))
+}
+
+async fn handle_stream(mut socket: WebSocket, spec: CommandSpec) {
+	if spec.command.is_empty() {
+		let _ = socket.send(Message::Text("error: command vector is empty".into())).await;
+		return;
+	}
+
+	let mut cmd = tokio::process::Command::new(&spec.command[0]);
+	cmd.args(&spec.command[1..]);
+	if let Some(ref dir) = spec.working_dir {
+		cmd.current_dir(dir);
+	}
+	cmd.stdout(Stdio::piped());
+	cmd.stderr(Stdio::piped());
+
+	let mut child = match cmd.spawn() {
+		Ok(c) => c,
+		Err(e) => {
+			let _ = socket.send(Message::Text(format!("error: {}", e).into())).await;
+			return;
+		}
+	};
+
+	let stdout = child.stdout.take().map(BufReader::new);
+	let stderr = child.stderr.take().map(BufReader::new);
+
+	let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+
+	if let Some(reader) = stdout {
+		let tx2 = tx.clone();
+		tokio::spawn(async move {
+			let mut lines = reader.lines();
+			while let Ok(Some(line)) = lines.next_line().await {
+				if tx2.send(format!("stdout: {}", line)).is_err() {
+					break;
+				}
+			}
+		});
+	}
+
+	if let Some(reader) = stderr {
+		let tx2 = tx.clone();
+		tokio::spawn(async move {
+			let mut lines = reader.lines();
+			while let Ok(Some(line)) = lines.next_line().await {
+				if tx2.send(format!("stderr: {}", line)).is_err() {
+					break;
+				}
+			}
+		});
+	}
+
+	drop(tx);
+
+	let wait_handle = tokio::spawn(async move { child.wait().await });
+
+	while let Some(line) = rx.recv().await {
+		if socket.send(Message::Text(line.into())).await.is_err() {
+			break;
+		}
+	}
+
+	if let Ok(Ok(status)) = wait_handle.await {
+		let msg = format!("exit: {}", status.code().unwrap_or(-1));
+		let _ = socket.send(Message::Text(msg.into())).await;
+	}
 }
