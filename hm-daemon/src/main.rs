@@ -26,6 +26,7 @@ async fn main() {
 		)
 		.route("/commands/{id}", delete(handlers::delete_command))
 		.route("/commands/{id}/run", post(handlers::run_command))
+		.route("/commands/{id}/stream", get(handlers::stream_command))
 		.route("/jobs", get(handlers::list_jobs).post(handlers::create_job))
 		.route("/jobs/{id}", delete(handlers::delete_job))
 		.route("/servers", get(handlers::list_servers).post(handlers::create_server))
