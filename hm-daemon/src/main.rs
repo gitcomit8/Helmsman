@@ -7,6 +7,7 @@ mod telemetry;
 mod auth;
 
 use crate::state::{init_db_pool, AppState};
+use axum::middleware;
 use axum::routing::post;
 use axum::{
 	routing::{delete, get},
@@ -34,8 +35,7 @@ async fn main() {
 		pairing_otp: Arc::new(Mutex::new(Some(otp))),
 	};
 
-	let app = Router::new()
-		.route("/status", get(|| async { "Daemon Operational" }))
+	let protected = Router::new()
 		.route(
 			"/commands",
 			get(handlers::list_commands).post(handlers::create_command),
@@ -48,6 +48,15 @@ async fn main() {
 		.route("/servers", get(handlers::list_servers).post(handlers::create_server))
 		.route("/servers/{id}", delete(handlers::delete_server))
 		.route("/servers/{id}/status", get(handlers::get_server_status))
+		.layer(middleware::from_fn_with_state(
+			app_state.clone(),
+			auth::auth_middleware,
+		));
+
+	let app = Router::new()
+		.route("/status", get(|| async { "Daemon Operational" }))
+		.route("/pair", post(handlers::pair))
+		.merge(protected)
 		.with_state(app_state);
 
 	let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
