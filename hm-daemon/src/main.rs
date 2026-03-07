@@ -1,5 +1,6 @@
 mod handlers;
 mod models;
+mod scheduler;
 mod state;
 mod executor;
 
