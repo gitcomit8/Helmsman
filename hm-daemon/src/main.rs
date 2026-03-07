@@ -12,6 +12,7 @@ use axum::{
 	routing::{delete, get},
 	Router,
 };
+use rand::Rng;
 use std::sync::{Arc, Mutex};
 
 #[tokio::main]
@@ -20,9 +21,17 @@ async fn main() {
 
 	tokio::spawn(scheduler::run_scheduler(db_pool.clone()));
 
+	let otp: String = rand::thread_rng()
+		.gen_range(0u32..=999999)
+		.to_string()
+		.chars()
+		.collect::<String>();
+	let otp = format!("{:0>6}", otp);
+	println!("Pairing code: {}", otp);
+
 	let app_state = AppState {
 		pool: db_pool,
-		pairing_otp: Arc::new(Mutex::new(None)),
+		pairing_otp: Arc::new(Mutex::new(Some(otp))),
 	};
 
 	let app = Router::new()
