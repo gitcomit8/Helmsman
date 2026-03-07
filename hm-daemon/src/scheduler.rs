@@ -59,6 +59,14 @@ async fn dispatch_due_jobs(pool: &DbPool) {
     };
 
     for (job_id, schedule_str, command_id, cmd_json) in due_jobs {
+        let next_run = Schedule::from_str(&schedule_str)
+            .ok()
+            .and_then(|s| s.upcoming(Utc).next());
+
+        if let Some(next) = next_run {
+            update_job_times(pool, &job_id, now, next);
+        }
+
         let command: Vec<String> = serde_json::from_str(&cmd_json).unwrap_or_default();
         let spec = CommandSpec {
             id: command_id,
@@ -68,21 +76,15 @@ async fn dispatch_due_jobs(pool: &DbPool) {
             timeout_seconds: None,
         };
 
-        match execute_command(&spec).await {
-            Ok(result) => eprintln!(
-                "Scheduler: job {} exited with {:?}",
-                job_id, result.exit_code
-            ),
-            Err(e) => eprintln!("Scheduler: job {} failed: {}", job_id, e),
-        }
-
-        let next_run = Schedule::from_str(&schedule_str)
-            .ok()
-            .and_then(|s| s.upcoming(Utc).next());
-
-        if let Some(next) = next_run {
-            update_job_times(pool, &job_id, now, next);
-        }
+        tokio::spawn(async move {
+            match execute_command(&spec).await {
+                Ok(result) => eprintln!(
+                    "Scheduler: job {} exited with {:?}",
+                    job_id, result.exit_code
+                ),
+                Err(e) => eprintln!("Scheduler: job {} failed: {}", job_id, e),
+            }
+        });
     }
 }
 
