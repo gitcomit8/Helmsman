@@ -3,6 +3,7 @@ mod models;
 mod scheduler;
 mod state;
 mod executor;
+mod telemetry;
 
 use crate::state::init_db_pool;
 use axum::routing::post;
