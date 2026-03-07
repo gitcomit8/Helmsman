@@ -1,5 +1,5 @@
-use crate::models::{Job, JobCreateRequest, Server, ServerCreateRequest, ServerStatus};
-use crate::{models::{CommandSpec, JobResult}, state::DbPool};
+use crate::models::{Job, JobCreateRequest, PairRequest, PairResponse, Server, ServerCreateRequest, ServerStatus};
+use crate::{models::{CommandSpec, JobResult}, state::{AppState, DbPool}};
 use axum::{
 	extract::{
 		ws::{Message, WebSocket, WebSocketUpgrade},
@@ -407,4 +407,43 @@ async fn handle_stream(mut socket: WebSocket, spec: CommandSpec) {
 		let msg = format!("exit: {}", status.code().unwrap_or(-1));
 		let _ = socket.send(Message::Text(msg.into())).await;
 	}
+}
+pub async fn pair(
+State(state): State<AppState>,
+Json(payload): Json<PairRequest>,
+) -> Result<Json<PairResponse>, StatusCode> {
+let valid = {
+let guard = state.pairing_otp.lock().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+guard.as_deref() == Some(payload.code.as_str())
+};
+
+if !valid {
+return Err(StatusCode::FORBIDDEN);
+}
+
+let token = uuid::Uuid::new_v4().to_string();
+let created_at = Utc::now().to_rfc3339();
+let token_clone = token.clone();
+
+tokio::task::spawn_blocking(move || -> Result<(), StatusCode> {
+let conn = state.pool.get().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+conn.execute(
+"INSERT INTO tokens (token, created_at) VALUES (?1, ?2)",
+params![token_clone, created_at],
+)
+.map_err(|e| {
+eprintln!("Token insert error: {}", e);
+StatusCode::INTERNAL_SERVER_ERROR
+})?;
+Ok(())
+})
+.await
+.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+{
+let mut guard = state.pairing_otp.lock().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+*guard = None;
+}
+
+Ok(Json(PairResponse { token }))
 }

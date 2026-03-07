@@ -57,3 +57,13 @@ pub struct JobCreateRequest {
 	pub schedule: String,
 	pub command_id: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct PairRequest {
+	pub code: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PairResponse {
+	pub token: String,
+}
