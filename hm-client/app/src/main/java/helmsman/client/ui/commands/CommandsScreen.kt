@@ -1,11 +1,9 @@
 package helmsman.client.ui.commands
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -30,95 +28,71 @@ import helmsman.client.ui.theme.DeathStrandingColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CommandsScreen(
-    api: HelmsmanApi,
-    onStreamCommand: (String) -> Unit,
-    navController: NavController
-) {
-    val viewModel: CommandsViewModel = viewModel(
-        factory = CommandsViewModel.Factory(api)
-    )
+fun CommandsScreen(api: HelmsmanApi, onStreamCommand: (String) -> Unit, navController: NavController) {
+    val viewModel: CommandsViewModel = viewModel(factory = CommandsViewModel.Factory(api))
     val commands by viewModel.commands.collectAsStateWithLifecycle()
     val createState by viewModel.createState.collectAsStateWithLifecycle()
     val runResult by viewModel.runResult.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { viewModel.loadCommands() }
 
-    var showAddDialog by remember { mutableStateOf(false) }
+    var editingCommand by remember { mutableStateOf<CommandSpec?>(null) }
     var showRunResult by remember { mutableStateOf(false) }
 
     LaunchedEffect(createState) {
-        if (createState is UiState.Success) {
-            showAddDialog = false
-            viewModel.resetCreateState()
-        }
+        if (createState is UiState.Success) { editingCommand = null; viewModel.resetCreateState() }
     }
-
     LaunchedEffect(runResult) {
-        if (runResult is UiState.Success || runResult is UiState.Error) {
-            showRunResult = true
-        }
+        if (runResult is UiState.Success || runResult is UiState.Error) showRunResult = true
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Commands", fontWeight = FontWeight.Bold, color = DeathStrandingColors.Gold)
-                },
+                title = { Text("Commands", fontWeight = FontWeight.Bold, color = DeathStrandingColors.Gold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = DeathStrandingColors.Gold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DeathStrandingColors.DeepNavy
-                )
+                actions = {
+                    IconButton(onClick = { viewModel.loadCommands() }) {
+                        Icon(Icons.Default.Refresh, "Refresh", tint = DeathStrandingColors.TextMuted)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeathStrandingColors.DeepNavy)
             )
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddDialog = true },
+                onClick = { editingCommand = CommandSpec(id = "", name = "", command = emptyList()) },
                 containerColor = DeathStrandingColors.Gold,
-                contentColor = DeathStrandingColors.DeepNavy
-            ) {
-                Icon(Icons.Default.Add, "Add Command")
-            }
+                contentColor = DeathStrandingColors.DeepNavy,
+                shape = RoundedCornerShape(16.dp)
+            ) { Icon(Icons.Default.Add, "Add Command") }
         },
         containerColor = DeathStrandingColors.DeepNavy
     ) { padding ->
         when (val state = commands) {
             is UiState.Loading -> LoadingIndicator(Modifier.padding(padding))
-            is UiState.Error -> {
-                EmptyStateMessage(
-                    icon = Icons.Default.Error,
-                    message = state.message,
-                    modifier = Modifier.padding(padding)
-                )
-            }
+            is UiState.Error -> EmptyStateMessage(Icons.Default.Warning, state.message, Modifier.padding(padding))
             is UiState.Success -> {
                 if (state.data.isEmpty()) {
-                    EmptyStateMessage(
-                        icon = Icons.Default.Terminal,
-                        message = "No commands registered yet",
-                        modifier = Modifier.padding(padding)
-                    )
+                    EmptyStateMessage(Icons.Default.Terminal, "No commands registered yet", Modifier.padding(padding))
                 } else {
                     LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(padding)
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(vertical = 16.dp)
                     ) {
-                        items(state.data, key = { it.id }) { command ->
+                        items(state.data, key = { it.id }) { cmd ->
                             CommandCard(
-                                command = command,
+                                command = cmd,
                                 isRunning = runResult is UiState.Loading,
-                                onRun = { viewModel.runCommand(command.id) },
-                                onStream = { onStreamCommand(command.id) },
-                                onDelete = { viewModel.deleteCommand(command.id) }
+                                onRun = { viewModel.runCommand(cmd.id) },
+                                onStream = { onStreamCommand(cmd.id) },
+                                onEdit = { editingCommand = cmd },
+                                onDelete = { viewModel.deleteCommand(cmd.id) }
                             )
                         }
                     }
@@ -128,23 +102,31 @@ fun CommandsScreen(
         }
     }
 
-    if (showAddDialog) {
-        AddCommandDialog(
-            onDismiss = { showAddDialog = false },
-            onAdd = { viewModel.createCommand(it) },
+    editingCommand?.let { cmd ->
+        val isNew = cmd.id.isEmpty()
+        CommandDialog(
+            title = if (isNew) "New Command" else "Edit Command",
+            initial = cmd,
+            lockId = !isNew,
+            onDismiss = { editingCommand = null; viewModel.resetCreateState() },
+            onSave = { viewModel.createCommand(it) },
             isLoading = createState is UiState.Loading,
             error = (createState as? UiState.Error)?.message
         )
     }
 
-    if (showRunResult && runResult is UiState.Success) {
-        RunResultDialog(
-            result = (runResult as UiState.Success).data,
-            onDismiss = {
-                showRunResult = false
-                viewModel.resetRunResult()
-            }
-        )
+    if (showRunResult) {
+        when (val r = runResult) {
+            is UiState.Success -> RunResultDialog(r.data) { showRunResult = false; viewModel.resetRunResult() }
+            is UiState.Error -> AlertDialog(
+                onDismissRequest = { showRunResult = false; viewModel.resetRunResult() },
+                containerColor = DeathStrandingColors.SurfaceCard,
+                title = { Text("Execution Failed", color = DeathStrandingColors.ErrorRed, fontWeight = FontWeight.Bold) },
+                text = { Text(r.message, color = DeathStrandingColors.TextSecondary) },
+                confirmButton = { GoldButton("Close") { showRunResult = false; viewModel.resetRunResult() } }
+            )
+            else -> {}
+        }
     }
 }
 
@@ -154,69 +136,59 @@ private fun CommandCard(
     isRunning: Boolean,
     onRun: () -> Unit,
     onStream: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     GoldGradientCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = command.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = DeathStrandingColors.TextPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = command.command.joinToString(" "),
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace
-                    ),
-                    color = DeathStrandingColors.Amber,
-                    maxLines = 2
-                )
-                if (command.workingDir != null) {
-                    Text(
-                        text = "📁 ${command.workingDir}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = DeathStrandingColors.TextMuted
-                    )
-                }
-                if (command.timeoutSeconds != null) {
-                    Text(
-                        text = "⏱ ${command.timeoutSeconds}s timeout",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = DeathStrandingColors.TextMuted
-                    )
-                }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(command.name, style = MaterialTheme.typography.titleSmall, color = DeathStrandingColors.TextPrimary, fontWeight = FontWeight.Bold)
+                GoldChip("id:${command.id}", color = DeathStrandingColors.TextMuted)
             }
-
-            Row {
-                IconButton(onClick = onRun, enabled = !isRunning) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        "Run",
-                        tint = DeathStrandingColors.SuccessGreen
-                    )
+            Surface(color = DeathStrandingColors.DeepNavy, shape = RoundedCornerShape(8.dp)) {
+                Text(
+                    command.command.joinToString(" "),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = DeathStrandingColors.Amber,
+                    maxLines = 3
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                command.workingDir?.let { GoldChip("📁 $it", color = DeathStrandingColors.TextMuted) }
+                command.timeoutSeconds?.let { GoldChip("⏱ ${it}s", color = DeathStrandingColors.Amber) }
+            }
+            HorizontalDivider(color = DeathStrandingColors.Border.copy(alpha = 0.4f))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onRun, enabled = !isRunning,
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DeathStrandingColors.SuccessGreen),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DeathStrandingColors.SuccessGreen.copy(alpha = 0.5f)),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Run", style = MaterialTheme.typography.labelMedium)
                 }
-                IconButton(onClick = onStream) {
-                    Icon(
-                        Icons.Default.Stream,
-                        "Stream",
-                        tint = DeathStrandingColors.InfoCyan
-                    )
+                OutlinedButton(
+                    onClick = onStream,
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DeathStrandingColors.StreamBlue),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DeathStrandingColors.StreamBlue.copy(alpha = 0.5f)),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Default.Sensors, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Live", style = MaterialTheme.typography.labelMedium)
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete,
-                        "Delete",
-                        tint = DeathStrandingColors.ErrorRed.copy(alpha = 0.7f)
-                    )
+                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Edit, "Edit", tint = DeathStrandingColors.Gold.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Delete, "Delete", tint = DeathStrandingColors.ErrorRed.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -224,174 +196,97 @@ private fun CommandCard(
 }
 
 @Composable
-private fun AddCommandDialog(
+private fun CommandDialog(
+    title: String,
+    initial: CommandSpec,
+    lockId: Boolean,
     onDismiss: () -> Unit,
-    onAdd: (CommandSpec) -> Unit,
+    onSave: (CommandSpec) -> Unit,
     isLoading: Boolean,
     error: String?
 ) {
-    var id by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var command by remember { mutableStateOf("") }
-    var workingDir by remember { mutableStateOf("") }
-    var timeout by remember { mutableStateOf("") }
+    var id by remember { mutableStateOf(initial.id) }
+    var name by remember { mutableStateOf(initial.name) }
+    var command by remember { mutableStateOf(initial.command.joinToString(" ")) }
+    var workingDir by remember { mutableStateOf(initial.workingDir ?: "") }
+    var timeout by remember { mutableStateOf(initial.timeoutSeconds?.toString() ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = DeathStrandingColors.SurfaceCard,
-        title = {
-            Text("New Command", color = DeathStrandingColors.Gold, fontWeight = FontWeight.Bold)
-        },
+        shape = RoundedCornerShape(20.dp),
+        title = { Text(title, color = DeathStrandingColors.Gold, fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = id, onValueChange = { id = it },
-                    label = { Text("ID (e.g. backup-db)") },
-                    singleLine = true,
-                    colors = goldTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Display Name") },
-                    singleLine = true,
-                    colors = goldTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = command, onValueChange = { command = it },
-                    label = { Text("Command (space separated)") },
-                    singleLine = true,
-                    colors = goldTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = workingDir, onValueChange = { workingDir = it },
-                    label = { Text("Working Directory (optional)") },
-                    singleLine = true,
-                    colors = goldTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = timeout, onValueChange = { timeout = it },
-                    label = { Text("Timeout (seconds, optional)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = goldTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (error != null) {
-                    Text(error, color = DeathStrandingColors.ErrorRed, style = MaterialTheme.typography.bodySmall)
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                HmTextField(id, "ID", { id = it }, enabled = !lockId)
+                HmTextField(name, "Name", { name = it })
+                HmTextField(command, "Command (space-separated args)", { command = it })
+                HmTextField(workingDir, "Working directory (optional)", { workingDir = it })
+                HmTextField(timeout, "Timeout seconds (optional)", { timeout = it }, keyboardType = KeyboardType.Number)
+                if (error != null) HmErrorText(error)
             }
         },
         confirmButton = {
             GoldButton(
-                text = if (isLoading) "Adding..." else "Add",
+                text = if (isLoading) "Saving…" else "Save",
+                enabled = !isLoading && id.isNotBlank() && name.isNotBlank() && command.isNotBlank(),
                 onClick = {
-                    val argv = command.split(" ").filter { it.isNotBlank() }
-                    if (id.isNotBlank() && name.isNotBlank() && argv.isNotEmpty()) {
-                        onAdd(
-                            CommandSpec(
-                                id = id.trim(),
-                                name = name.trim(),
-                                command = argv,
-                                workingDir = workingDir.ifBlank { null },
-                                timeoutSeconds = timeout.toIntOrNull()
-                            )
-                        )
-                    }
-                },
-                enabled = !isLoading && id.isNotBlank() && name.isNotBlank() && command.isNotBlank()
+                    onSave(CommandSpec(
+                        id = id.trim(), name = name.trim(),
+                        command = command.trim().split(Regex("\\s+")).filter { it.isNotBlank() },
+                        workingDir = workingDir.ifBlank { null },
+                        timeoutSeconds = timeout.toIntOrNull()
+                    ))
+                }
             )
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = DeathStrandingColors.TextSecondary)
-            }
-        }
+        dismissButton = { TextButton(onDismiss) { Text("Cancel", color = DeathStrandingColors.TextMuted) } }
     )
 }
 
 @Composable
 private fun RunResultDialog(result: RunResult, onDismiss: () -> Unit) {
+    val ok = (result.exitCode ?: -1) == 0
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = DeathStrandingColors.SurfaceCard,
+        shape = RoundedCornerShape(20.dp),
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(
-                    if (result.exitCode == 0) Icons.Default.CheckCircle else Icons.Default.Error,
-                    contentDescription = null,
-                    tint = if (result.exitCode == 0)
-                        DeathStrandingColors.SuccessGreen
-                    else
-                        DeathStrandingColors.ErrorRed
+                    if (ok) Icons.Default.CheckCircle else Icons.Default.Cancel, null,
+                    tint = if (ok) DeathStrandingColors.SuccessGreen else DeathStrandingColors.ErrorRed,
+                    modifier = Modifier.size(22.dp)
                 )
-                Text(
-                    "Exit Code: ${result.exitCode ?: "killed"}",
-                    color = DeathStrandingColors.Gold,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text("Exit: ${result.exitCode ?: "killed"}", color = DeathStrandingColors.Gold, fontWeight = FontWeight.Bold)
+                    Text("${result.durationMs} ms", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.TextMuted)
+                }
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Duration: ${result.durationMs}ms",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = DeathStrandingColors.TextSecondary
-                )
                 if (result.stdout.isNotBlank()) {
-                    Text("stdout", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.Gold)
-                    Surface(
-                        color = DeathStrandingColors.DeepNavy,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = result.stdout,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace
-                            ),
-                            color = DeathStrandingColors.SuccessGreen,
-                            modifier = Modifier.padding(12.dp)
-                        )
+                    Text("STDOUT", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.Gold, letterSpacing = 2.sp)
+                    Surface(color = DeathStrandingColors.DeepNavy, shape = RoundedCornerShape(8.dp)) {
+                        Text(result.stdout.take(800), modifier = Modifier.padding(10.dp),
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            color = DeathStrandingColors.SuccessGreen)
                     }
                 }
                 if (result.stderr.isNotBlank()) {
-                    Text("stderr", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.ErrorRed)
-                    Surface(
-                        color = DeathStrandingColors.DeepNavy,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = result.stderr,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace
-                            ),
-                            color = DeathStrandingColors.ErrorRed,
-                            modifier = Modifier.padding(12.dp)
-                        )
+                    Text("STDERR", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.ErrorRed, letterSpacing = 2.sp)
+                    Surface(color = DeathStrandingColors.DeepNavy, shape = RoundedCornerShape(8.dp)) {
+                        Text(result.stderr.take(400), modifier = Modifier.padding(10.dp),
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            color = DeathStrandingColors.ErrorRed)
                     }
+                }
+                if (result.stdout.isBlank() && result.stderr.isBlank()) {
+                    Text("(no output)", style = MaterialTheme.typography.bodySmall, color = DeathStrandingColors.TextMuted)
                 }
             }
         },
-        confirmButton = {
-            GoldButton(text = "Close", onClick = onDismiss)
-        }
+        confirmButton = { GoldButton("Close", onClick = onDismiss) }
     )
 }
-
-@Composable
-fun goldTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = DeathStrandingColors.Gold,
-    unfocusedBorderColor = DeathStrandingColors.Border,
-    cursorColor = DeathStrandingColors.Gold,
-    focusedLabelColor = DeathStrandingColors.Gold,
-    unfocusedLabelColor = DeathStrandingColors.TextMuted,
-    focusedTextColor = DeathStrandingColors.TextPrimary,
-    unfocusedTextColor = DeathStrandingColors.TextPrimary
-)
