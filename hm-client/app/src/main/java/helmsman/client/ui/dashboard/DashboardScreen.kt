@@ -38,7 +38,12 @@ import helmsman.client.ui.theme.DeathStrandingColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(api: HelmsmanApi, navController: NavController) {
+fun DashboardScreen(
+    api: HelmsmanApi,
+    navController: NavController,
+    useDynamicColor: Boolean = false,
+    onToggleTheme: () -> Unit = {}
+) {
     val viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory(api))
     val daemonStatus by viewModel.daemonStatus.collectAsStateWithLifecycle()
     val servers by viewModel.servers.collectAsStateWithLifecycle()
@@ -57,8 +62,15 @@ fun DashboardScreen(api: HelmsmanApi, navController: NavController) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = onToggleTheme) {
+                        Icon(
+                            if (useDynamicColor) Icons.Default.Palette else Icons.Default.AutoAwesome,
+                            contentDescription = "Toggle theme",
+                            tint = if (useDynamicColor) DeathStrandingColors.StreamBlue else DeathStrandingColors.Gold
+                        )
+                    }
                     IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Default.Refresh, "Refresh", tint = DeathStrandingColors.Gold)
+                        Icon(Icons.Default.Refresh, "Refresh", tint = DeathStrandingColors.TextSecondary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DeathStrandingColors.DeepNavy)

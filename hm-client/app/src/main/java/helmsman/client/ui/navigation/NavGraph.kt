@@ -33,7 +33,9 @@ fun HelmsmanNavGraph(
     isAuthenticated: Boolean,
     api: HelmsmanApi,
     authRepository: AuthRepository,
-    db: AppDatabase
+    db: AppDatabase,
+    useDynamicColor: Boolean = false,
+    onToggleTheme: () -> Unit = {}
 ) {
     NavHost(
         navController = navController,
@@ -54,32 +56,26 @@ fun HelmsmanNavGraph(
         composable(Routes.HOME) {
             DashboardScreen(
                 api = api,
-                navController = navController
+                navController = navController,
+                useDynamicColor = useDynamicColor,
+                onToggleTheme = onToggleTheme
             )
         }
 
         composable(Routes.COMMANDS) {
             CommandsScreen(
                 api = api,
-                onStreamCommand = { commandId ->
-                    navController.navigate(Routes.console(commandId))
-                },
+                onStreamCommand = { commandId -> navController.navigate(Routes.console(commandId)) },
                 navController = navController
             )
         }
 
         composable(Routes.JOBS) {
-            JobsScreen(
-                api = api,
-                navController = navController
-            )
+            JobsScreen(api = api, navController = navController)
         }
 
         composable(Routes.SERVERS) {
-            ServersScreen(
-                api = api,
-                navController = navController
-            )
+            ServersScreen(api = api, navController = navController)
         }
 
         composable(
@@ -87,11 +83,7 @@ fun HelmsmanNavGraph(
             arguments = listOf(navArgument("commandId") { type = NavType.StringType })
         ) { backStackEntry ->
             val commandId = backStackEntry.arguments?.getString("commandId") ?: return@composable
-            ConsoleScreen(
-                commandId = commandId,
-                db = db,
-                onBack = { navController.popBackStack() }
-            )
+            ConsoleScreen(commandId = commandId, db = db, onBack = { navController.popBackStack() })
         }
     }
 }

@@ -14,8 +14,8 @@ import helmsman.client.data.remote.ApiClient
 import helmsman.client.domain.AuthRepository
 import helmsman.client.ui.navigation.HelmsmanNavGraph
 import helmsman.client.ui.theme.HelmsmanTheme
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 private val android.content.Context.dataStore by preferencesDataStore(name = "settings")
@@ -33,9 +33,18 @@ class MainActivity : ComponentActivity() {
         val isAuthenticated = runBlocking { authRepository.getToken() != null }
 
         setContent {
+            val scope = rememberCoroutineScope()
             val useDynamicColor by dataStore.data
                 .map { it[DYNAMIC_COLOR_KEY] ?: false }
                 .collectAsState(initial = false)
+
+            val toggleTheme: () -> Unit = {
+                scope.launch {
+                    dataStore.edit { prefs ->
+                        prefs[DYNAMIC_COLOR_KEY] = !(prefs[DYNAMIC_COLOR_KEY] ?: false)
+                    }
+                }
+            }
 
             HelmsmanTheme(useDynamicColor = useDynamicColor) {
                 val navController = rememberNavController()
@@ -44,7 +53,9 @@ class MainActivity : ComponentActivity() {
                     isAuthenticated = isAuthenticated,
                     api = api,
                     authRepository = authRepository,
-                    db = db
+                    db = db,
+                    useDynamicColor = useDynamicColor,
+                    onToggleTheme = toggleTheme
                 )
             }
         }
