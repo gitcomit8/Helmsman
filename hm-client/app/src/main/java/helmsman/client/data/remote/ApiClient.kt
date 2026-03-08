@@ -23,8 +23,12 @@ object ApiClient {
         val authInterceptor = AuthInterceptor(db)
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         }
+
+        val gson = com.google.gson.GsonBuilder()
+            .setLenient()
+            .create()
 
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
@@ -37,7 +41,7 @@ object ApiClient {
         val retrofit = Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
 
         val api = retrofit.create(HelmsmanApi::class.java)

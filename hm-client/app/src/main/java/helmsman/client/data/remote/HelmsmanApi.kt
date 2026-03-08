@@ -1,14 +1,15 @@
 package helmsman.client.data.remote
 
 import helmsman.client.data.model.*
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.*
 
 interface HelmsmanApi {
 
-    // Health
+    // Health — returns plain text "Daemon Operational"
     @GET("status")
-    suspend fun getStatus(): Response<String>
+    suspend fun getStatus(): Response<ResponseBody>
 
     // Pairing
     @POST("pair")

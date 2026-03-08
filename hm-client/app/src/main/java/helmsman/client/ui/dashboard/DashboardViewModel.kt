@@ -29,7 +29,8 @@ class DashboardViewModel(private val api: HelmsmanApi) : ViewModel() {
             try {
                 val response = api.getStatus()
                 if (response.isSuccessful) {
-                    _daemonStatus.value = UiState.Success(response.body() ?: "OK")
+                    val text = response.body()?.string() ?: "OK"
+                    _daemonStatus.value = UiState.Success(text)
                 } else {
                     _daemonStatus.value = UiState.Error("Daemon returned ${response.code()}")
                 }
