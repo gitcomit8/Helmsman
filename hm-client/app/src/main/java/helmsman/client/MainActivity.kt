@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
                 .map { it[THEME_MODE_KEY] ?: 0 }
                 .collectAsState(initial = 0)
 
-            val themeMode = if (themeModeIndex == 1) AppThemeMode.AMOLED else AppThemeMode.ZINC
+            val themeMode = if (themeModeIndex == 1) AppThemeMode.AMOLED else AppThemeMode.MATERIAL_YOU
 
             val cycleTheme: () -> Unit = {
                 scope.launch {

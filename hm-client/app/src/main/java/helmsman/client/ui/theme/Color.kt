@@ -3,7 +3,7 @@ package helmsman.client.ui.theme
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-enum class AppThemeMode { ZINC, AMOLED }
+enum class AppThemeMode { MATERIAL_YOU, AMOLED }
 
 /** Extra semantic colors not in Material ColorScheme */
 data class ExtendedColors(
@@ -15,7 +15,8 @@ data class ExtendedColors(
     val onCode: Color,
 )
 
-val ZincExtended = ExtendedColors(
+// Used by Material You mode and as fallback on API < 31
+val MaterialYouExtended = ExtendedColors(
     success   = Color(0xFF4ADE80),
     onSuccess = Color(0xFF052E16),
     warning   = Color(0xFFFBBF24),
@@ -33,4 +34,4 @@ val AmoledExtended = ExtendedColors(
     onCode    = Color(0xFF6EE7B7),
 )
 
-val LocalExtendedColors = staticCompositionLocalOf { ZincExtended }
+val LocalExtendedColors = staticCompositionLocalOf { MaterialYouExtended }

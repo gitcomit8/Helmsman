@@ -1,39 +1,41 @@
 package helmsman.client.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// ── Zinc Dark ────────────────────────────────────────────────────────────────
-private val ZincDark = darkColorScheme(
-    primary               = Color(0xFF8B5CF6),   // violet-500
+// Fallback for devices running API 30 (minSdk) that lack dynamic color
+private val MaterialYouFallback = darkColorScheme(
+    primary               = Color(0xFF8B5CF6),   // violet-500 — matches logo
     onPrimary             = Color(0xFFFFFFFF),
-    primaryContainer      = Color(0xFF3B0764),   // violet-950
-    onPrimaryContainer    = Color(0xFFEDE9FE),   // violet-100
-    secondary             = Color(0xFF60A5FA),   // blue-400
+    primaryContainer      = Color(0xFF3B0764),
+    onPrimaryContainer    = Color(0xFFEDE9FE),
+    secondary             = Color(0xFF60A5FA),
     onSecondary           = Color(0xFF000000),
-    tertiary              = Color(0xFF34D399),   // emerald-400
+    tertiary              = Color(0xFF34D399),
     onTertiary            = Color(0xFF000000),
-    background            = Color(0xFF09090B),   // zinc-950
-    onBackground          = Color(0xFFF4F4F5),   // zinc-100
-    surface               = Color(0xFF18181B),   // zinc-900
+    background            = Color(0xFF09090B),
+    onBackground          = Color(0xFFF4F4F5),
+    surface               = Color(0xFF18181B),
     onSurface             = Color(0xFFF4F4F5),
-    surfaceVariant        = Color(0xFF27272A),   // zinc-800
-    onSurfaceVariant      = Color(0xFFA1A1AA),   // zinc-400
+    surfaceVariant        = Color(0xFF27272A),
+    onSurfaceVariant      = Color(0xFFA1A1AA),
     surfaceContainerLowest  = Color(0xFF09090B),
     surfaceContainerLow     = Color(0xFF18181B),
     surfaceContainer        = Color(0xFF1E1E22),
     surfaceContainerHigh    = Color(0xFF27272A),
     surfaceContainerHighest = Color(0xFF3F3F46),
-    outline               = Color(0xFF3F3F46),   // zinc-700
+    outline               = Color(0xFF3F3F46),
     outlineVariant        = Color(0xFF27272A),
-    error                 = Color(0xFFF87171),   // red-400
+    error                 = Color(0xFFF87171),
     onError               = Color(0xFFFFFFFF),
     errorContainer        = Color(0xFF7F1D1D),
     onErrorContainer      = Color(0xFFFECACA),
@@ -76,11 +78,17 @@ private val AmoledDark = darkColorScheme(
 
 @Composable
 fun HelmsmanTheme(
-    themeMode: AppThemeMode = AppThemeMode.ZINC,
+    themeMode: AppThemeMode = AppThemeMode.MATERIAL_YOU,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (themeMode == AppThemeMode.AMOLED) AmoledDark else ZincDark
-    val extended   = if (themeMode == AppThemeMode.AMOLED) AmoledExtended else ZincExtended
+    val context = LocalContext.current
+    val colorScheme = when (themeMode) {
+        AppThemeMode.AMOLED       -> AmoledDark
+        AppThemeMode.MATERIAL_YOU ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) dynamicDarkColorScheme(context)
+            else MaterialYouFallback
+    }
+    val extended = if (themeMode == AppThemeMode.AMOLED) AmoledExtended else MaterialYouExtended
 
     val view = LocalView.current
     if (!view.isInEditMode) {
