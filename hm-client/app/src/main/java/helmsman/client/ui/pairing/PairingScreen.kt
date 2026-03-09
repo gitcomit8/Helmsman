@@ -1,6 +1,7 @@
 package helmsman.client.ui.pairing
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -16,12 +17,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import helmsman.client.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import helmsman.client.data.remote.HelmsmanApi
@@ -49,19 +52,12 @@ fun PairingScreen(api: HelmsmanApi, authRepository: AuthRepository, onPaired: ()
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            // Logo mark placeholder
-            Surface(
-                modifier = Modifier.size(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                )
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("H", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                }
-            }
+            // Logo
+            Image(
+                painter = painterResource(R.drawable.ic_helmsman),
+                contentDescription = "Helmsman",
+                modifier = Modifier.size(96.dp)
+            )
 
             Spacer(Modifier.height(24.dp))
 

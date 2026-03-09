@@ -7,9 +7,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -26,9 +23,7 @@ import helmsman.client.ui.dashboard.DashboardScreen
 import helmsman.client.ui.jobs.JobsScreen
 import helmsman.client.ui.pairing.PairingScreen
 import helmsman.client.ui.servers.ServersScreen
-import helmsman.client.ui.theme.AppThemeMode
-
-// ── Route constants ───────────────────────────────────────────────────────────
+import androidx.navigation.NavGraph.Companion.findStartDestination
 
 private const val ROUTE_PAIRING  = "pairing"
 private const val ROUTE_MAIN     = "main"
@@ -48,17 +43,13 @@ private val TABS = listOf(
     BottomTab(ROUTE_SERVERS,  "Servers",  Icons.Default.Dns),
 )
 
-// ── Root nav ──────────────────────────────────────────────────────────────────
-
 @Composable
 fun HelmsmanNavGraph(
     navController: NavHostController,
     isAuthenticated: Boolean,
     api: HelmsmanApi,
     authRepository: AuthRepository,
-    db: AppDatabase,
-    themeMode: AppThemeMode,
-    onCycleTheme: () -> Unit
+    db: AppDatabase
 ) {
     NavHost(navController, startDestination = if (isAuthenticated) ROUTE_MAIN else ROUTE_PAIRING) {
         composable(ROUTE_PAIRING) {
@@ -68,10 +59,8 @@ fun HelmsmanNavGraph(
         }
         composable(ROUTE_MAIN) {
             MainShell(
-                api          = api,
-                db           = db,
-                themeMode    = themeMode,
-                onCycleTheme = onCycleTheme,
+                api = api,
+                db = db,
                 onOpenConsole = { id -> navController.navigate(consoleRoute(id)) }
             )
         }
@@ -85,14 +74,10 @@ fun HelmsmanNavGraph(
     }
 }
 
-// ── Main shell with persistent bottom nav ────────────────────────────────────
-
 @Composable
 private fun MainShell(
     api: HelmsmanApi,
     db: AppDatabase,
-    themeMode: AppThemeMode,
-    onCycleTheme: () -> Unit,
     onOpenConsole: (String) -> Unit
 ) {
     val innerNav = rememberNavController()
@@ -107,8 +92,8 @@ private fun MainShell(
             ) {
                 TABS.forEach { tab ->
                     NavigationBarItem(
-                        selected  = currentRoute == tab.route,
-                        onClick   = {
+                        selected = currentRoute == tab.route,
+                        onClick = {
                             innerNav.navigate(tab.route) {
                                 popUpTo(innerNav.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true
@@ -130,23 +115,10 @@ private fun MainShell(
         }
     ) { padding ->
         NavHost(innerNav, startDestination = ROUTE_HOME) {
-            composable(ROUTE_HOME) {
-                DashboardScreen(
-                    api          = api,
-                    themeMode    = themeMode,
-                    onCycleTheme = onCycleTheme,
-                    contentPadding = padding
-                )
-            }
-            composable(ROUTE_COMMANDS) {
-                CommandsScreen(api = api, onStreamCommand = onOpenConsole, contentPadding = padding)
-            }
-            composable(ROUTE_JOBS) {
-                JobsScreen(api = api, contentPadding = padding)
-            }
-            composable(ROUTE_SERVERS) {
-                ServersScreen(api = api, contentPadding = padding)
-            }
+            composable(ROUTE_HOME)     { DashboardScreen(api = api, contentPadding = padding) }
+            composable(ROUTE_COMMANDS) { CommandsScreen(api = api, onStreamCommand = onOpenConsole, contentPadding = padding) }
+            composable(ROUTE_JOBS)     { JobsScreen(api = api, contentPadding = padding) }
+            composable(ROUTE_SERVERS)  { ServersScreen(api = api, contentPadding = padding) }
         }
     }
 }

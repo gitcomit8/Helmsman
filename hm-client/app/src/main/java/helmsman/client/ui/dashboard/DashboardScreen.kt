@@ -17,19 +17,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import helmsman.client.data.model.ServerStatus
 import helmsman.client.data.remote.HelmsmanApi
 import helmsman.client.domain.UiState
 import helmsman.client.ui.components.*
-import helmsman.client.ui.theme.AppThemeMode
 import helmsman.client.ui.theme.LocalExtendedColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     api: HelmsmanApi,
-    themeMode: AppThemeMode,
-    onCycleTheme: () -> Unit,
     contentPadding: PaddingValues = PaddingValues()
 ) {
     val vm: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory(api))
@@ -56,14 +52,6 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
-                    // Theme toggle — icon clearly different per mode
-                    IconButton(onClick = onCycleTheme) {
-                        Icon(
-                            if (themeMode == AppThemeMode.AMOLED) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = "Switch theme",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(Icons.Default.Refresh, "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -84,13 +72,12 @@ fun DashboardScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ── Daemon status card ─────────────────────────────────────────
             val isOnline = daemonStatus is UiState.Success
             Card(
-                shape  = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                shape     = RoundedCornerShape(12.dp),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 elevation = CardDefaults.cardElevation(0.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier  = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier.padding(16.dp).fillMaxWidth(),
@@ -126,7 +113,6 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Server list ────────────────────────────────────────────────
             if (servers is UiState.Success) {
                 val list = (servers as UiState.Success).data
                 if (list.isNotEmpty()) {
@@ -134,8 +120,8 @@ fun DashboardScreen(
                     list.forEach { server ->
                         val status = statuses[server.id]
                         Card(
-                            shape  = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                            shape     = RoundedCornerShape(12.dp),
+                            colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                             elevation = CardDefaults.cardElevation(0.dp),
                             modifier  = Modifier.fillMaxWidth()
                         ) {
