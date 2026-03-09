@@ -2,7 +2,6 @@ package helmsman.client.ui.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,92 +11,46 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import helmsman.client.ui.theme.DeathStrandingColors
+import androidx.compose.ui.unit.sp
+
+// ── Status dot with subtle pulse ─────────────────────────────────────────────
 
 @Composable
-fun GoldGradientCard(
-    modifier: Modifier = Modifier,
-    glowColor: Color = DeathStrandingColors.Gold,
-    content: @Composable ColumnScope.() -> Unit
-) {
+fun StatusDot(isOnline: Boolean, modifier: Modifier = Modifier, size: Dp = 8.dp) {
+    val color = if (isOnline) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+    val inf = rememberInfiniteTransition(label = "dot")
+    val alpha by inf.animateFloat(
+        initialValue = 0.5f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "alpha"
+    )
+    Box(modifier = modifier.size(size).clip(CircleShape).background(color.copy(alpha = alpha)))
+}
+
+// ── Generic card shell ────────────────────────────────────────────────────────
+
+@Composable
+fun AppCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
-        modifier = modifier
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            glowColor.copy(alpha = 0.08f),
-                            Color.Transparent
-                        ),
-                        center = Offset(size.width / 2, size.height / 2),
-                        radius = size.maxDimension * 0.8f
-                    )
-                )
-            }
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    0f to glowColor.copy(alpha = 0.5f),
-                    0.5f to glowColor.copy(alpha = 0.15f),
-                    1f to glowColor.copy(alpha = 0.4f)
-                ),
-                shape = RoundedCornerShape(16.dp)
-            ),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DeathStrandingColors.SurfaceCard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), content = content)
     }
 }
 
-@Composable
-fun StatusDot(
-    isOnline: Boolean,
-    modifier: Modifier = Modifier,
-    size: Dp = 10.dp
-) {
-    val color = if (isOnline) DeathStrandingColors.SuccessGreen else DeathStrandingColors.ErrorRed
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
-    Box(modifier = modifier) {
-        Box(
-            modifier = Modifier
-                .size(size * 2.2f)
-                .clip(CircleShape)
-                .background(color.copy(alpha = 0.15f * scale))
-                .align(Alignment.Center)
-        )
-        Box(
-            modifier = Modifier
-                .size(size)
-                .clip(CircleShape)
-                .background(color)
-                .align(Alignment.Center)
-        )
-    }
-}
+// ── Primary button ────────────────────────────────────────────────────────────
 
 @Composable
-fun GoldButton(
+fun PrimaryButton(
     text: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -106,106 +59,109 @@ fun GoldButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = DeathStrandingColors.Gold,
-            contentColor = DeathStrandingColors.DeepNavy,
-            disabledContainerColor = DeathStrandingColors.DarkGold.copy(alpha = 0.3f),
-            disabledContentColor = DeathStrandingColors.TextMuted
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor   = MaterialTheme.colorScheme.onPrimary,
         )
     ) {
         if (icon != null) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
+            Icon(icon, null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
         }
-        Text(text = text, fontWeight = FontWeight.Bold, letterSpacing = androidx.compose.ui.unit.TextUnit(1f, androidx.compose.ui.unit.TextUnitType.Sp))
+        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
     }
 }
 
+// ── Ghost / outlined button ───────────────────────────────────────────────────
+
 @Composable
-fun SectionHeader(
-    title: String,
+fun GhostButton(
+    text: String,
     modifier: Modifier = Modifier,
-    action: @Composable (() -> Unit)? = null
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    icon: ImageVector? = null,
+    onClick: () -> Unit
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    TextButton(
+        onClick = onClick,
+        modifier = modifier.height(36.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = tint)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .height(18.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(DeathStrandingColors.Gold)
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = DeathStrandingColors.Gold,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = androidx.compose.ui.unit.TextUnit(2f, androidx.compose.ui.unit.TextUnitType.Sp)
-            )
+        if (icon != null) {
+            Icon(icon, null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
         }
+        Text(text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+// ── Section header ────────────────────────────────────────────────────────────
+
+@Composable
+fun SectionHeader(title: String, modifier: Modifier = Modifier, action: @Composable (() -> Unit)? = null) {
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.5.sp,
+            fontWeight = FontWeight.SemiBold
+        )
         action?.invoke()
     }
 }
 
+// ── Inline tag / badge ────────────────────────────────────────────────────────
+
 @Composable
-fun EmptyStateMessage(icon: ImageVector, message: String, modifier: Modifier = Modifier) {
+fun Tag(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Surface(
+        color = color.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+@Composable
+fun EmptyState(icon: ImageVector, label: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(56.dp),
+        modifier = modifier.fillMaxSize().padding(48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(DeathStrandingColors.Gold.copy(alpha = 0.06f))
-                .border(1.dp, DeathStrandingColors.Gold.copy(alpha = 0.2f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(36.dp), tint = DeathStrandingColors.Gold.copy(alpha = 0.4f))
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(text = message, style = MaterialTheme.typography.bodyMedium, color = DeathStrandingColors.TextMuted)
+        Icon(icon, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+        Spacer(Modifier.height(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+// ── Loading ───────────────────────────────────────────────────────────────────
 
 @Composable
 fun LoadingIndicator(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(color = DeathStrandingColors.Gold, strokeWidth = 2.dp, modifier = Modifier.size(36.dp))
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 2.dp
+        )
     }
 }
 
-@Composable
-fun GoldChip(text: String, icon: ImageVector? = null, color: Color = DeathStrandingColors.Gold) {
-    Surface(
-        color = color.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            if (icon != null) {
-                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
-            }
-            Text(text = text, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Medium)
-        }
-    }
-}
+// ── Shared form text field ────────────────────────────────────────────────────
 
 @Composable
 fun HmTextField(
@@ -213,39 +169,65 @@ fun HmTextField(
     label: String,
     onValueChange: (String) -> Unit,
     enabled: Boolean = true,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    singleLine: Boolean = true
 ) {
     OutlinedTextField(
-        value = value, onValueChange = onValueChange,
-        label = { Text(label) },
-        singleLine = true,
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+        singleLine = singleLine,
         enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        shape = RoundedCornerShape(10.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = DeathStrandingColors.Gold,
-            unfocusedBorderColor = DeathStrandingColors.Border,
-            cursorColor = DeathStrandingColors.Gold,
-            focusedLabelColor = DeathStrandingColors.Gold,
-            unfocusedLabelColor = DeathStrandingColors.TextMuted,
-            focusedTextColor = DeathStrandingColors.TextPrimary,
-            unfocusedTextColor = DeathStrandingColors.TextPrimary,
-            disabledBorderColor = DeathStrandingColors.Border.copy(alpha = 0.5f),
-            disabledTextColor = DeathStrandingColors.TextMuted,
-            disabledLabelColor = DeathStrandingColors.TextMuted
+            focusedBorderColor   = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            disabledBorderColor  = MaterialTheme.colorScheme.outlineVariant,
+            focusedLabelColor    = MaterialTheme.colorScheme.primary,
+            cursorColor          = MaterialTheme.colorScheme.primary,
         ),
-        shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     )
 }
 
 @Composable
 fun HmErrorText(message: String) {
-    Surface(color = DeathStrandingColors.ErrorRed.copy(alpha = 0.08f), shape = RoundedCornerShape(8.dp)) {
-        Text(
-            message,
-            modifier = Modifier.padding(10.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = DeathStrandingColors.ErrorRed
-        )
-    }
+    Text(
+        message,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+// ── Dismissible dialog shell ──────────────────────────────────────────────────
+
+@Composable
+fun HmDialog(
+    title: String,
+    confirmLabel: String,
+    confirmEnabled: Boolean = true,
+    isLoading: Boolean = false,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(16.dp),
+        title = { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content) },
+        confirmButton = {
+            PrimaryButton(
+                text = if (isLoading) "Saving…" else confirmLabel,
+                enabled = confirmEnabled && !isLoading,
+                onClick = onConfirm
+            )
+        },
+        dismissButton = {
+            TextButton(onDismiss) { Text("Cancel") }
+        }
+    )
 }

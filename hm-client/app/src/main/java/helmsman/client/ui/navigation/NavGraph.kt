@@ -1,10 +1,21 @@
 package helmsman.client.ui.navigation
 
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import helmsman.client.data.local.AppDatabase
 import helmsman.client.data.remote.HelmsmanApi
@@ -15,17 +26,29 @@ import helmsman.client.ui.dashboard.DashboardScreen
 import helmsman.client.ui.jobs.JobsScreen
 import helmsman.client.ui.pairing.PairingScreen
 import helmsman.client.ui.servers.ServersScreen
+import helmsman.client.ui.theme.AppThemeMode
 
-object Routes {
-    const val PAIRING = "pairing"
-    const val HOME = "home"
-    const val COMMANDS = "commands"
-    const val JOBS = "jobs"
-    const val SERVERS = "servers"
-    const val CONSOLE = "console/{commandId}"
+// ── Route constants ───────────────────────────────────────────────────────────
 
-    fun console(commandId: String) = "console/$commandId"
-}
+private const val ROUTE_PAIRING  = "pairing"
+private const val ROUTE_MAIN     = "main"
+private const val ROUTE_HOME     = "home"
+private const val ROUTE_COMMANDS = "commands"
+private const val ROUTE_JOBS     = "jobs"
+private const val ROUTE_SERVERS  = "servers"
+private const val ROUTE_CONSOLE  = "console/{commandId}"
+private fun consoleRoute(id: String) = "console/$id"
+
+data class BottomTab(val route: String, val label: String, val icon: ImageVector)
+
+private val TABS = listOf(
+    BottomTab(ROUTE_HOME,     "Home",     Icons.Default.Home),
+    BottomTab(ROUTE_COMMANDS, "Commands", Icons.Default.Terminal),
+    BottomTab(ROUTE_JOBS,     "Jobs",     Icons.Default.Schedule),
+    BottomTab(ROUTE_SERVERS,  "Servers",  Icons.Default.Dns),
+)
+
+// ── Root nav ──────────────────────────────────────────────────────────────────
 
 @Composable
 fun HelmsmanNavGraph(
@@ -34,56 +57,96 @@ fun HelmsmanNavGraph(
     api: HelmsmanApi,
     authRepository: AuthRepository,
     db: AppDatabase,
-    useDynamicColor: Boolean = false,
-    onToggleTheme: () -> Unit = {}
+    themeMode: AppThemeMode,
+    onCycleTheme: () -> Unit
 ) {
-    NavHost(
-        navController = navController,
-        startDestination = if (isAuthenticated) Routes.HOME else Routes.PAIRING
-    ) {
-        composable(Routes.PAIRING) {
-            PairingScreen(
-                api = api,
-                authRepository = authRepository,
-                onPaired = {
-                    navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.PAIRING) { inclusive = true }
-                    }
-                }
+    NavHost(navController, startDestination = if (isAuthenticated) ROUTE_MAIN else ROUTE_PAIRING) {
+        composable(ROUTE_PAIRING) {
+            PairingScreen(api = api, authRepository = authRepository, onPaired = {
+                navController.navigate(ROUTE_MAIN) { popUpTo(ROUTE_PAIRING) { inclusive = true } }
+            })
+        }
+        composable(ROUTE_MAIN) {
+            MainShell(
+                api          = api,
+                db           = db,
+                themeMode    = themeMode,
+                onCycleTheme = onCycleTheme,
+                onOpenConsole = { id -> navController.navigate(consoleRoute(id)) }
             )
         }
-
-        composable(Routes.HOME) {
-            DashboardScreen(
-                api = api,
-                navController = navController,
-                useDynamicColor = useDynamicColor,
-                onToggleTheme = onToggleTheme
-            )
-        }
-
-        composable(Routes.COMMANDS) {
-            CommandsScreen(
-                api = api,
-                onStreamCommand = { commandId -> navController.navigate(Routes.console(commandId)) },
-                navController = navController
-            )
-        }
-
-        composable(Routes.JOBS) {
-            JobsScreen(api = api, navController = navController)
-        }
-
-        composable(Routes.SERVERS) {
-            ServersScreen(api = api, navController = navController)
-        }
-
         composable(
-            route = Routes.CONSOLE,
+            route     = ROUTE_CONSOLE,
             arguments = listOf(navArgument("commandId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val commandId = backStackEntry.arguments?.getString("commandId") ?: return@composable
-            ConsoleScreen(commandId = commandId, db = db, onBack = { navController.popBackStack() })
+        ) { back ->
+            val id = back.arguments?.getString("commandId") ?: return@composable
+            ConsoleScreen(commandId = id, db = db, onBack = { navController.popBackStack() })
+        }
+    }
+}
+
+// ── Main shell with persistent bottom nav ────────────────────────────────────
+
+@Composable
+private fun MainShell(
+    api: HelmsmanApi,
+    db: AppDatabase,
+    themeMode: AppThemeMode,
+    onCycleTheme: () -> Unit,
+    onOpenConsole: (String) -> Unit
+) {
+    val innerNav = rememberNavController()
+    val backStack by innerNav.currentBackStackEntryAsState()
+    val currentRoute = backStack?.destination?.route
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp
+            ) {
+                TABS.forEach { tab ->
+                    NavigationBarItem(
+                        selected  = currentRoute == tab.route,
+                        onClick   = {
+                            innerNav.navigate(tab.route) {
+                                popUpTo(innerNav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState    = true
+                            }
+                        },
+                        icon  = { Icon(tab.icon, tab.label) },
+                        label = { Text(tab.label, fontSize = 11.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor   = MaterialTheme.colorScheme.primary,
+                            selectedTextColor   = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            indicatorColor      = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        )
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        NavHost(innerNav, startDestination = ROUTE_HOME) {
+            composable(ROUTE_HOME) {
+                DashboardScreen(
+                    api          = api,
+                    themeMode    = themeMode,
+                    onCycleTheme = onCycleTheme,
+                    contentPadding = padding
+                )
+            }
+            composable(ROUTE_COMMANDS) {
+                CommandsScreen(api = api, onStreamCommand = onOpenConsole, contentPadding = padding)
+            }
+            composable(ROUTE_JOBS) {
+                JobsScreen(api = api, contentPadding = padding)
+            }
+            composable(ROUTE_SERVERS) {
+                ServersScreen(api = api, contentPadding = padding)
+            }
         }
     }
 }

@@ -3,94 +3,77 @@ package helmsman.client.ui.servers
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import helmsman.client.data.model.Server
 import helmsman.client.data.model.ServerStatus
 import helmsman.client.data.remote.HelmsmanApi
 import helmsman.client.domain.UiState
-
-
 import helmsman.client.ui.components.*
-import helmsman.client.ui.theme.DeathStrandingColors
+import helmsman.client.ui.theme.LocalExtendedColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ServersScreen(api: HelmsmanApi, navController: NavController) {
-    val viewModel: ServersViewModel = viewModel(factory = ServersViewModel.Factory(api))
-    val servers by viewModel.servers.collectAsStateWithLifecycle()
-    val createState by viewModel.createState.collectAsStateWithLifecycle()
-    val statuses by viewModel.serverStatuses.collectAsStateWithLifecycle()
+fun ServersScreen(api: HelmsmanApi, contentPadding: PaddingValues = PaddingValues()) {
+    val vm: ServersViewModel = viewModel(factory = ServersViewModel.Factory(api))
+    val servers     by vm.servers.collectAsStateWithLifecycle()
+    val createState by vm.createState.collectAsStateWithLifecycle()
+    val statuses    by vm.serverStatuses.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) { viewModel.loadServers() }
+    LaunchedEffect(Unit) { vm.loadServers() }
 
-    var editingServer by remember { mutableStateOf<Server?>(null) }
-
+    var editing by remember { mutableStateOf<Server?>(null) }
     LaunchedEffect(createState) {
-        if (createState is UiState.Success) { editingServer = null; viewModel.resetCreateState() }
+        if (createState is UiState.Success) { editing = null; vm.resetCreateState() }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Servers", fontWeight = FontWeight.Bold, color = DeathStrandingColors.Gold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = DeathStrandingColors.Gold)
-                    }
-                },
+                title = { Text("Servers", fontWeight = FontWeight.SemiBold) },
                 actions = {
-                    IconButton(onClick = { viewModel.loadServers() }) {
-                        Icon(Icons.Default.Refresh, "Refresh", tint = DeathStrandingColors.TextMuted)
+                    IconButton(onClick = { vm.loadServers() }) {
+                        Icon(Icons.Default.Refresh, "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { editing = Server("", "", "") }) {
+                        Icon(Icons.Default.Add, "Add", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeathStrandingColors.DeepNavy)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { editingServer = Server(id = "", name = "", host = "") },
-                containerColor = DeathStrandingColors.Gold,
-                contentColor = DeathStrandingColors.DeepNavy,
-                shape = RoundedCornerShape(16.dp)
-            ) { Icon(Icons.Default.Add, "Add Server") }
-        },
-        containerColor = DeathStrandingColors.DeepNavy
-    ) { padding ->
-        when (val state = servers) {
-            is UiState.Loading -> LoadingIndicator(Modifier.padding(padding))
-            is UiState.Error -> EmptyStateMessage(Icons.Default.Warning, state.message, Modifier.padding(padding))
+        containerColor = MaterialTheme.colorScheme.background
+    ) { inner ->
+        when (val s = servers) {
+            is UiState.Loading -> LoadingIndicator(Modifier.padding(inner).padding(contentPadding))
+            is UiState.Error   -> EmptyState(Icons.Default.Warning, s.message, Modifier.padding(inner).padding(contentPadding))
             is UiState.Success -> {
-                if (state.data.isEmpty()) {
-                    EmptyStateMessage(Icons.Default.Dns, "No remote servers configured", Modifier.padding(padding))
+                if (s.data.isEmpty()) {
+                    EmptyState(Icons.Default.Dns, "No servers configured yet", Modifier.padding(inner).padding(contentPadding))
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(vertical = 16.dp)
+                        modifier = Modifier.fillMaxSize().padding(inner).padding(contentPadding).padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
-                        items(state.data, key = { it.id }) { server ->
+                        items(s.data, key = { it.id }) { server ->
                             ServerCard(
                                 server = server,
-                                statusState = statuses[server.id],
-                                onProbe = { viewModel.probeServer(server.id) },
-                                onEdit = { editingServer = server },
-                                onDelete = { viewModel.deleteServer(server.id) }
+                                status = statuses[server.id],
+                                onProbe  = { vm.probeServer(server.id) },
+                                onEdit   = { editing = server },
+                                onDelete = { vm.deleteServer(server.id) }
                             )
                         }
                     }
@@ -100,16 +83,14 @@ fun ServersScreen(api: HelmsmanApi, navController: NavController) {
         }
     }
 
-    editingServer?.let { server ->
-        val isNew = server.id.isEmpty()
+    editing?.let { server ->
         ServerDialog(
-            title = if (isNew) "New Server" else "Edit Server",
-            initial = server,
-            lockId = !isNew,
-            onDismiss = { editingServer = null; viewModel.resetCreateState() },
-            onSave = { viewModel.createServer(it) },
+            initial   = server,
+            isNew     = server.id.isEmpty(),
             isLoading = createState is UiState.Loading,
-            error = (createState as? UiState.Error)?.message
+            error     = (createState as? UiState.Error)?.message,
+            onDismiss = { editing = null; vm.resetCreateState() },
+            onSave    = { vm.createServer(it) }
         )
     }
 }
@@ -117,135 +98,135 @@ fun ServersScreen(api: HelmsmanApi, navController: NavController) {
 @Composable
 private fun ServerCard(
     server: Server,
-    statusState: UiState<ServerStatus>?,
+    status: UiState<ServerStatus>?,
     onProbe: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    GoldGradientCard(modifier = Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(
-                        modifier = Modifier.size(40.dp).clip(CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Dns, null, tint = DeathStrandingColors.Gold, modifier = Modifier.size(20.dp))
-                    }
-                    Column {
-                        Text(server.name, style = MaterialTheme.typography.titleSmall, color = DeathStrandingColors.TextPrimary, fontWeight = FontWeight.Bold)
-                        Text(server.host, style = MaterialTheme.typography.bodySmall, color = DeathStrandingColors.TextMuted, fontFamily = FontFamily.Monospace)
-                    }
+    val ext = LocalExtendedColors.current
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(server.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(server.host, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row {
+                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Edit, "Edit", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Row {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Edit, "Edit", tint = DeathStrandingColors.Gold.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Delete, "Delete", tint = DeathStrandingColors.ErrorRed.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
-                    }
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
                 }
             }
+        }
 
-            when (statusState) {
-                null -> OutlinedButton(
-                    onClick = onProbe,
-                    modifier = Modifier.fillMaxWidth().height(36.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DeathStrandingColors.Gold),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DeathStrandingColors.Gold.copy(alpha = 0.4f)),
-                    contentPadding = PaddingValues(horizontal = 12.dp)
-                ) {
-                    Icon(Icons.Default.NetworkCheck, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Probe Server", style = MaterialTheme.typography.labelMedium)
-                }
-                is UiState.Loading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = DeathStrandingColors.Gold, trackColor = DeathStrandingColors.Border)
-                is UiState.Success -> ServerStatusPanel(statusState.data, onProbe)
-                is UiState.Error -> {
-                    Surface(color = DeathStrandingColors.ErrorRed.copy(alpha = 0.08f), shape = RoundedCornerShape(8.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(statusState.message, style = MaterialTheme.typography.bodySmall, color = DeathStrandingColors.ErrorRed, modifier = Modifier.weight(1f))
-                            TextButton(onProbe, contentPadding = PaddingValues(8.dp)) { Text("Retry", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.Gold) }
+        Spacer(Modifier.height(10.dp))
+
+        when (status) {
+            null -> TextButton(
+                onClick = onProbe,
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.NetworkCheck, null, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Probe", style = MaterialTheme.typography.labelMedium)
+            }
+
+            is UiState.Loading -> LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            is UiState.Success -> {
+                val s = status.data
+                val online = s.pingMs != null
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Ping chip
+                    Surface(
+                        color = (if (online) ext.success else MaterialTheme.colorScheme.error).copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.wrapContentWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            StatusDot(isOnline = online, size = 7.dp)
+                            Text(
+                                s.pingMs?.let { "%.0f ms".format(it) } ?: "offline",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (online) ext.success else MaterialTheme.colorScheme.error
+                            )
                         }
                     }
+                    // Re-probe button
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onProbe, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Refresh, "Re-probe", modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                else -> {}
+                if (s.uname.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            s.uname,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
-        }
-    }
-}
 
-@Composable
-private fun ServerStatusPanel(status: ServerStatus, onRefresh: () -> Unit) {
-    val pingOk = status.pingMs != null
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HorizontalDivider(color = DeathStrandingColors.Border.copy(alpha = 0.4f))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Surface(modifier = Modifier.weight(1f), color = DeathStrandingColors.DeepNavy, shape = RoundedCornerShape(10.dp)) {
-                Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StatusDot(isOnline = pingOk, size = 8.dp)
-                        Text(if (pingOk) "REACHABLE" else "OFFLINE", style = MaterialTheme.typography.labelSmall, color = if (pingOk) DeathStrandingColors.SuccessGreen else DeathStrandingColors.ErrorRed, letterSpacing = 1.5.sp)
-                    }
-                    if (pingOk) {
-                        Text("${status.pingMs?.let { "%.0f".format(it) }} ms", style = MaterialTheme.typography.headlineSmall, color = DeathStrandingColors.Gold, fontWeight = FontWeight.Bold)
-                    } else {
-                        Text(status.pingError ?: "unreachable", style = MaterialTheme.typography.bodySmall, color = DeathStrandingColors.ErrorRed)
-                    }
+            is UiState.Error -> {
+                Text(status.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = onProbe, contentPadding = PaddingValues(0.dp)) {
+                    Text("Retry", style = MaterialTheme.typography.labelSmall)
                 }
             }
-            Surface(modifier = Modifier.weight(2f), color = DeathStrandingColors.DeepNavy, shape = RoundedCornerShape(10.dp)) {
-                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("OS / KERNEL", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.TextMuted, letterSpacing = 1.5.sp)
-                    Text(status.uname, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = DeathStrandingColors.TextSecondary, maxLines = 3)
-                }
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onRefresh, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(14.dp), tint = DeathStrandingColors.TextMuted)
-                Spacer(Modifier.width(4.dp))
-                Text("Re-probe", style = MaterialTheme.typography.labelSmall, color = DeathStrandingColors.TextMuted)
-            }
+
+            else -> {}
         }
     }
 }
 
 @Composable
 private fun ServerDialog(
-    title: String,
     initial: Server,
-    lockId: Boolean,
-    onDismiss: () -> Unit,
-    onSave: (Server) -> Unit,
+    isNew: Boolean,
     isLoading: Boolean,
-    error: String?
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (Server) -> Unit
 ) {
-    var id by remember { mutableStateOf(initial.id) }
+    var id   by remember { mutableStateOf(initial.id) }
     var name by remember { mutableStateOf(initial.name) }
     var host by remember { mutableStateOf(initial.host) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = DeathStrandingColors.SurfaceCard,
-        shape = RoundedCornerShape(20.dp),
-        title = { Text(title, color = DeathStrandingColors.Gold, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                HmTextField(value = id, label = "Server ID", onValueChange = { id = it }, enabled = !lockId)
-                HmTextField(value = name, label = "Display name", onValueChange = { name = it })
-                HmTextField(value = host, label = "Hostname or IP", onValueChange = { host = it })
-                if (error != null) HmErrorText(error)
-            }
-        },
-        confirmButton = {
-            GoldButton(
-                text = if (isLoading) "Saving…" else "Save",
-                enabled = !isLoading && id.isNotBlank() && name.isNotBlank() && host.isNotBlank(),
-                onClick = { onSave(Server(id = id.trim(), name = name.trim(), host = host.trim())) }
-            )
-        },
-        dismissButton = { TextButton(onDismiss) { Text("Cancel", color = DeathStrandingColors.TextMuted) } }
-    )
+    HmDialog(
+        title          = if (isNew) "New server" else "Edit server",
+        confirmLabel   = "Save",
+        confirmEnabled = id.isNotBlank() && name.isNotBlank() && host.isNotBlank(),
+        isLoading      = isLoading,
+        onDismiss      = onDismiss,
+        onConfirm      = { onSave(Server(id.trim(), name.trim(), host.trim())) }
+    ) {
+        HmTextField(id, "Server ID", { id = it }, enabled = isNew)
+        HmTextField(name, "Display name", { name = it })
+        HmTextField(host, "Hostname or IP", { host = it })
+        if (error != null) HmErrorText(error)
+    }
 }
